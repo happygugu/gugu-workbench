@@ -13,7 +13,6 @@ body{
     max-width:740px;
     margin:0 auto;
 }
-/*顶部标题区域 匹配工作台风格*/
 .head-wrap{
     display:flex;
     justify-content:space-between;
@@ -34,13 +33,10 @@ body{
     font-size:15px;
     box-shadow:0 3px 0 #e29292;
     cursor:pointer;
-    transition:0.15s;
 }
 .refresh-all:active{
     transform:translateY(2px);
-    box-shadow:0 1px 0 #e29292;
 }
-/*平台切换标签栏*/
 .tab-container{
     display:flex;
     gap:12px;
@@ -58,84 +54,25 @@ body{
     font-size:15px;
     cursor:pointer;
     box-shadow:0 3px 0 #f1e2dd;
-    transition:0.15s;
 }
 .tab-item.active{
     background:#f8b8b8;
     color:white;
     box-shadow:0 3px 0 #e29292;
 }
-.tab-item:active{
-    transform:translateY(2px);
-}
-/*榜单卡片容器*/
 .board-card{
     background:#ffffff;
     border-radius:28px;
-    padding:22px;
+    padding:12px;
     box-shadow:0 6px 0 #f5e9e4;
+    height: 70vh;
 }
-.board-header{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    margin-bottom:18px;
-}
-.board-name{
-    font-size:22px;
-    font-weight:600;
-}
-.change-btn{
-    padding:8px 16px;
-    border-radius:999px;
-    border:1px solid #e8c8bf;
-    background:#fff;
-    cursor:pointer;
-}
-/*单条热点条目*/
-.hot-item{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    padding:14px 16px;
-    background:#fff9f6;
+iframe{
+    width:100%;
+    height:100%;
     border-radius:20px;
-    margin-bottom:12px;
+    border:0;
 }
-.item-left{
-    display:flex;
-    align-items:center;
-    gap:14px;
-}
-.rank-num{
-    width:32px;
-    height:32px;
-    border-radius:50%;
-    background:#f8b8b8;
-    color:white;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-}
-.item-title{
-    font-size:16px;
-    cursor:pointer;
-}
-.heart-icon{
-    font-size:22px;
-    cursor:pointer;
-    color:#ddc0bb;
-}
-.heart-icon.saved{
-    color:#e87878;
-}
-/*加载/空提示*/
-.tip-text{
-    text-align:center;
-    padding:60px 0;
-    color:#b8988e;
-}
-.collect-view{display:none;}
 </style>
 </head>
 <body>
@@ -145,157 +82,31 @@ body{
 </div>
 
 <div class="tab-container" id="tabBox">
-    <button class="tab-item active" data-type="news">时政新闻</button>
-    <button class="tab-item" data-type="weibo">微博热搜</button>
-    <button class="tab-item" data-type="bilibili">B站热搜</button>
-    <button class="tab-item" data-type="douyin">抖音热点</button>
-    <button class="tab-item" data-type="zhihu">知乎热榜</button>
+    <button class="tab-item active" data-src="https://s.weibo.com/top/summary">微博热搜</button>
+    <button class="tab-item" data-src="https://www.bilibili.com/h5/search/hot">B站热搜</button>
+    <button class="tab-item" data-src="https://www.zhihu.com/hot">知乎热榜</button>
+    <button class="tab-item" data-src="https://www.douyin.com/hot/">抖音热点</button>
 </div>
 
 <div class="board-card">
-    <div class="board-header">
-        <div class="board-name" id="boardTitle">时政新闻</div>
-        <button class="change-btn" id="changeBtn">⟳换一批</button>
-    </div>
-    <div id="listBox"></div>
+    <iframe id="frame" src="https://s.weibo.com/top/summary"></iframe>
 </div>
 
-<div class="collect-view" id="collectBox"></div>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-// =========【请修改这里！填入你的Supabase信息】=========
-const SUPABASE_URL = "https://skfmksarguilopzewabh.supabase.co";
-const SUPABASE_KEY = "sb_publishable_tl23-KF1dU4viQaLvToD_A_ZwsdVZYC";
-const SYNC_CODE = "wgf7362790";
-// ======================================================
-const supabase = window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
-
-let currentType = "news";
-let hotList = [];
-let collectList = [];
-
 const tabBox = document.getElementById("tabBox");
-const listBox = document.getElementById("listBox");
-const boardTitle = document.getElementById("boardTitle");
+const iframe = document.getElementById("frame");
 const refreshBtn = document.getElementById("refreshBtn");
-const changeBtn = document.getElementById("changeBtn");
 
-// 切换标签
 tabBox.addEventListener("click",e=>{
     const tab = e.target.closest(".tab-item");
     if(!tab) return;
     document.querySelectorAll(".tab-item").forEach(t=>t.classList.remove("active"));
     tab.classList.add("active");
-    currentType = tab.dataset.type;
-    switch(currentType){
-        case "news":boardTitle.innerText="时政新闻";break;
-        case "weibo":boardTitle.innerText="微博热搜";break;
-        case "bilibili":boardTitle.innerText="B站热搜";break;
-        case "douyin":boardTitle.innerText="抖音热点";break;
-        case "zhihu":boardTitle.innerText="知乎热榜";break;
-    }
-    loadHotData();
+    iframe.src = tab.dataset.src;
 })
-refreshBtn.onclick = loadHotData;
-changeBtn.onclick = loadHotData;
-
-// 加载热搜
-async function loadHotData(){
-    listBox.innerHTML = `<div class="tip-text">正在加载热点，请稍等...</div>`;
-    try{
-        const proxy = "https://corsproxy.io/?";
-        let apiUrl;
-        switch(currentType){
-            case "news": apiUrl = proxy + encodeURIComponent("https://api.iyingdi.com/v2/hot/news"); break;
-            case "weibo": apiUrl = proxy + encodeURIComponent("https://api.iyingdi.com/v2/hot/weibo"); break;
-            case "bilibili": apiUrl = proxy + encodeURIComponent("https://api.iyingdi.com/v2/hot/bilibili"); break;
-            case "douyin": apiUrl = proxy + encodeURIComponent("https://api.iyingdi.com/v2/hot/douyin"); break;
-            case "zhihu": apiUrl = proxy + encodeURIComponent("https://api.iyingdi.com/v2/hot/zhihu"); break;
-        }
-        const res = await fetch(apiUrl);
-        const json = await res.json();
-        hotList = json.list || [];
-        renderList();
-    }catch(err){
-        listBox.innerHTML = `<div class="tip-text">网络波动，刷新重试</div>`;
-    }
+refreshBtn.onclick = ()=>{
+    iframe.src = iframe.src;
 }
-
-// 渲染榜单
-function renderList(){
-    if(!hotList.length){
-        listBox.innerHTML = `<div class="tip-text">暂无热点数据</div>`;
-        return;
-    }
-    let html = "";
-    hotList.forEach((item,idx)=>{
-        html += `
-        <div class="hot-item">
-            <div class="item-left">
-                <div class="rank-num">${idx+1}</div>
-                <div class="item-title" data-url="${item.url}">${item.title}</div>
-            </div>
-            <div class="heart-icon" data-url="${item.url}" data-title="${item.title}" data-src="${currentType}">♡</div>
-        </div>`
-    })
-    listBox.innerHTML = html;
-    bindItemEvent();
-    refreshHeartStatus();
-}
-
-// 绑定点击事件
-function bindItemEvent(){
-    document.querySelectorAll(".item-title").forEach(el=>{
-        el.onclick = ()=> window.open(el.dataset.url,"_blank");
-    })
-    document.querySelectorAll(".heart-icon").forEach(el=>{
-        el.onclick = async ()=>{
-            const url = el.dataset.url;
-            const title = el.dataset.title;
-            const source = el.dataset.src;
-            const exist = collectList.find(c=>c.url === url);
-            if(exist){
-                await delCollect(exist.id);
-            }else{
-                await addCollect(url,title,source);
-            }
-            await loadCollect();
-            refreshHeartStatus();
-        }
-    })
-}
-
-// 收藏相关
-async function loadCollect(){
-    const {data} = await supabase.from("hot_collect")
-        .select("*")
-        .eq("sync_key",SYNC_CODE)
-        .order("create_at",{asc:false});
-    collectList = data || [];
-}
-function refreshHeartStatus(){
-    document.querySelectorAll(".heart-icon").forEach(el=>{
-        const u = el.dataset.url;
-        if(collectList.find(c=>c.url===u)){
-            el.classList.add("saved");
-            el.innerText = "♥";
-        }else{
-            el.classList.remove("saved");
-            el.innerText = "♡";
-        }
-    })
-}
-async function addCollect(url,title,source){
-    const uid = btoa(url);
-    await supabase.from("hot_collect").insert([{id:uid,sync_key:SYNC_CODE,title,url,source}]);
-}
-async function delCollect(id){
-    await supabase.from("hot_collect").delete().eq("id",id);
-}
-
-loadHotData();
-loadCollect();
 </script>
 </body>
 </html>
