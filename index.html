@@ -632,6 +632,9 @@ body.modal-open{overflow:hidden;}
 
 /* ===== v8：好习惯提醒（坏习惯页顶部） ===== */
 .habit-reminder-card{background:linear-gradient(145deg,#FFF7F2,#FFEFEA);}
+.usage-box{margin-top:12px;background:#fff;border-radius:14px;padding:12px 14px;box-shadow:var(--shadowSm);}
+.usage-bar{height:12px;border-radius:10px;background:#EFE6DD;overflow:hidden;margin-top:8px;}
+.usage-fill{height:100%;width:0%;border-radius:10px;background:linear-gradient(145deg,#9be8a8,#5fd17a);transition:width .4s ease;}
 .habit-reminder-card::before{display:none;}
 .habit-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
 .habit-card{background:linear-gradient(145deg,#FFFFFF,#FFF6F0);border-radius:22px;padding:12px 10px;text-align:center;box-shadow:var(--shadowSm);border:1px solid rgba(255,255,255,0.7);display:flex;flex-direction:column;align-items:center;gap:6px;}
@@ -3594,6 +3597,7 @@ function renderSettings(c){
   +'<button class="btn secondary" id="supaUp">上传到云端</button>'
   +'<button class="btn secondary" id="supaDown">从云端下载</button>'
 +'</div>'
++'<div class="usage-box"><div style="display:flex;justify-content:space-between;font-size:12px;font-weight:800;color:var(--brownSoft);"><span>云端用量（Supabase）</span><span id="supaUsedTxt">--</span></div><div class="usage-bar"><div class="usage-fill" id="supaUsedFill" style="width:0%;"></div></div><div style="font-size:11px;color:var(--brownSoft);margin-top:5px;" id="supaUsedNote">免费额度 500MB，接近上限时同步会失败</div></div>'
 +'<details style="font-size:12px;color:var(--brownLight);"><summary style="cursor:pointer;font-weight:800;">首次使用：建表 SQL（在 Supabase SQL Editor 运行）</summary>'
 +'<pre style="white-space:pre-wrap;background:#fff;border-radius:10px;padding:10px;margin-top:8px;font-size:11px;line-height:1.5;">create table if not exists gugu_sync (\n  slot text primary key,\n  payload text not null,\n  updated_at timestamptz default now()\n);\nalter table gugu_sync enable row level security;\ncreate policy "anon_all" on gugu_sync for all to anon using (true) with check (true);</pre>'
 +'<div style="margin-top:6px;">然后在 <b>Settings → API</b> 复制 Project URL 和 anon public key 填上方即可。</div></details>'
@@ -3615,6 +3619,7 @@ function renderSettings(c){
   $('#supaSave').onclick=function(){lsSet('supaUrl',$('#supaUrl').value.trim());lsSet('supaKey',$('#supaKey').value.trim());lsSet('supaCode',$('#supaCode').value.trim());toast('已保存 Supabase 配置');};
 $('#supaUp').onclick=supaUpload;
 $('#supaDown').onclick=supaDownload;
+try{var _le=JSON.stringify(supaCollect()).length;var _used=lsGet('supaUsed',0);if(document.getElementById('supaUsedTxt')){if(_used){updateSupaUsage(_used);}else{document.getElementById('supaUsedTxt').textContent='本地约 '+fmtBytes(_le)+'（上传后略增）';document.getElementById('supaUsedNote').textContent='点「上传到云端」后显示云端真实用量';}};}catch(e){}
 $('#stPet').onclick=function(){lsSet('petHideDate','');petShow();toast('小宠物回来啦 ♡');};
   $('#stPetPos').onclick=function(){
     lsSet('petPos',null);
@@ -3664,6 +3669,17 @@ $('#stPet').onclick=function(){lsSet('petHideDate','');petShow();toast('小宠�
 /* ===== 云端同步（Supabase，Web Crypto + fetch，零外部库） ===== */
 function bytesToB64(bytes){var bin='';var chunk=0x8000;for(var i=0;i<bytes.length;i+=chunk){bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));}return btoa(bin);}
 function b64ToBytes(b64){var bin=atob(b64);var out=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return out;}
+function fmtBytes(n){if(n<1024)return n+' B';if(n<1024*1024)return (n/1024).toFixed(1)+' KB';if(n<1024*1024*1024)return (n/1024/1024).toFixed(2)+' MB';return (n/1024/1024/1024).toFixed(2)+' GB';}
+var SUPA_LIMIT=500*1024*1024;
+function updateSupaUsage(usedBytes){
+  lsSet('supaUsed',usedBytes||0);
+  var txt=document.getElementById('supaUsedTxt'),fill=document.getElementById('supaUsedFill'),note=document.getElementById('supaUsedNote');
+  if(!txt)return;
+  var pct=Math.min(100,(usedBytes||0)/SUPA_LIMIT*100);
+  txt.textContent=fmtBytes(usedBytes||0)+' / 500MB';
+  if(fill){fill.style.width=pct.toFixed(2)+'%';fill.style.background=pct>95?'linear-gradient(145deg,#ff8a8a,#ff5b5b)':pct>80?'linear-gradient(145deg,#ffd28a,#ffb14d)':'linear-gradient(145deg,#9be8a8,#5fd17a)';}
+  if(note)note.textContent=pct>95?'⚠️ 已接近上限，同步可能失败！请清理数据':pct>80?'接近上限，注意清理':'免费额度 500MB，接近上限时同步会失败';
+}
 function supaSlot(code){return crypto.subtle.digest('SHA-256',new TextEncoder().encode(code)).then(function(b){return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,'0');}).join('').slice(0,16);});}
 function supaKey(code){var enc=new TextEncoder();return crypto.subtle.importKey('raw',enc.encode(code),'PBKDF2',false,['deriveKey']).then(function(km){return crypto.subtle.deriveKey({name:'PBKDF2',salt:enc.encode('gugu-sync-salt-v1'),iterations:100000,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);});}
 async function supaEncrypt(code,obj){var key=await supaKey(code);var iv=crypto.getRandomValues(new Uint8Array(12));var pt=new TextEncoder().encode(JSON.stringify(obj));var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},key,pt);var out=new Uint8Array(iv.length+ct.byteLength);out.set(iv,0);out.set(new Uint8Array(ct),iv.length);return bytesToB64(out);}
@@ -3677,9 +3693,14 @@ async function supaUpload(){
     var data=supaCollect();
     var payload=await supaEncrypt(code,data);
     var slot=await supaSlot(code);
-    var res=await fetch(url.replace(/\/$/,'')+'/rest/v1/gugu_sync?on_conflict=slot',{method:'POST',headers:{'apikey':anon,'Authorization':'Bearer '+anon,'Content-Type':'application/json','Prefer':'resolution=merge'},body:JSON.stringify({slot:slot,payload:payload,updated_at:new Date().toISOString()})});
-    if(!res.ok){toast('上传失败 '+res.status);return;}
-    lsSet('supaSyncedAt',Date.now());toast('已同步到云端 ✿');renderPage();
+    var res=await fetch(url.replace(/\/$/,'')+'/rest/v1/gugu_sync?on_conflict=slot',{method:'POST',headers:{'apikey':anon,'Authorization':'Bearer '+anon,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({slot:slot,payload:payload,updated_at:new Date().toISOString()})});
+    if(!res.ok){
+      if(res.status===409){
+        res=await fetch(url.replace(/\/$/,'')+'/rest/v1/gugu_sync?slot=eq.'+encodeURIComponent(slot),{method:'PATCH',headers:{'apikey':anon,'Authorization':'Bearer '+anon,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({payload:payload,updated_at:new Date().toISOString()})});
+        if(!res.ok){toast('上传失败 '+res.status);return;}
+      }else{toast('上传失败 '+res.status);return;}
+    }
+    lsSet('supaSyncedAt',Date.now());updateSupaUsage(payload.length);toast('已同步到云端 ✿');renderPage();
   }catch(e){toast('上传出错：'+e.message);}
 }
 async function supaDownload(){
@@ -3694,8 +3715,7 @@ async function supaDownload(){
     if(!arr.length){toast('云端还没有数据，先上传一次');return;}
     var data=await supaDecrypt(code,arr[0].payload);
     await applySyncData(data);
-    lsSet('supaSyncedAt',Date.parse(arr[0].updated_at)||Date.now());
-    toast('已从云端恢复，三端一致 ✿');renderPage();
+    lsSet('supaSyncedAt',Date.parse(arr[0].updated_at)||Date.now());updateSupaUsage((arr[0].payload||'').length);toast('已从云端恢复，三端一致 ✿');renderPage();
   }catch(e){toast('下载出错（同步码或网络有误）');}
 }
 async function applySyncData(data){
