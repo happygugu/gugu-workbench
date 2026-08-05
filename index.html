@@ -368,6 +368,7 @@ input,textarea,select{border:none;background:transparent;}
   .summary-grid4{grid-template-columns:repeat(2,1fr);gap:11px;}
   .quick-grid{grid-template-columns:repeat(4,1fr);}
   .fab{right:18px;bottom:calc(18px + var(--safeBottom));width:58px;height:58px;}
+  .fab-menu{right:18px;bottom:calc(86px + var(--safeBottom));}
   .pomo-time{font-size:42px;}
   .emoji-pick{grid-template-columns:repeat(6,1fr);}
   .mini-val{font-size:18px;}
@@ -1626,7 +1627,6 @@ function renderAccount(c){
           +'<button class="btn small secondary" data-goaldel="'+g.id+'">删除</button>'
         +'</div></div></div>';
     }).join('');
-    goalCardsHtml+='<button class="btn small secondary" id="goalNew" style="margin-top:12px;">+ 新目标</button>';
     if(doneGoals.length){
       var dopen=!!state.ui.goalDoneOpen;
       var doneInner=doneGoals.map(function(g){
@@ -1641,6 +1641,7 @@ function renderAccount(c){
         +'</div>';
     }
   }
+  goalCardsHtml+='<button class="btn small secondary" id="goalNew" style="margin-top:12px;">+ 新目标</button>';
 
   var catMap={};
   mon.filter(function(r){return r.kind==='expense';}).forEach(function(r){catMap[r.cat||'其他']=(catMap[r.cat||'其他']||0)+num(r.amount);});
@@ -1721,9 +1722,21 @@ function renderAccount(c){
    +'</div>';
 
   var fab=document.createElement('button');
-  fab.className='fab'; fab.title='快速记一笔';
+  fab.className='fab'; fab.title='快速添加';
   fab.innerHTML=ICONS.plus;
-  fab.onclick=function(){openAccountEdit();};
+  fab.onclick=function(e){
+    e.stopPropagation();
+    var fm=document.getElementById('fabMenu');
+    if(fm){fm.remove();return;}
+    var menu=document.createElement('div');
+    menu.id='fabMenu';
+    menu.className='fab-menu';
+    menu.innerHTML='<button class="btn" style="width:100%;margin:0;">记一笔收支</button><button class="btn secondary" style="width:100%;margin:0;">新建攒钱目标</button>';
+    menu.querySelector('.btn').onclick=function(ev){ev.stopPropagation();menu.remove();openAccountEdit();};
+    menu.querySelector('.btn.secondary').onclick=function(ev){ev.stopPropagation();menu.remove();openGoalEdit(null);};
+    document.body.appendChild(menu);
+    setTimeout(function(){document.addEventListener('click',function h(){menu.remove();document.removeEventListener('click',h);});},0);
+  };
   document.body.appendChild(fab);
 
   var gn=$('#goalNew'); if(gn) gn.onclick=function(){openGoalEdit(null);};
