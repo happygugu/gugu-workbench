@@ -695,7 +695,6 @@ body.modal-open{overflow:hidden;}
         <button class="pin-btn" data-key="7">7</button><button class="pin-btn" data-key="8">8</button><button class="pin-btn" data-key="9">9</button>
         <button class="pin-btn del" data-key="del">←</button><button class="pin-btn" data-key="0">0</button><button class="pin-btn del" data-key="clear">C</button>
       </div>
-      <div class="login-forget">初始密码：138078，可在设置中修改</div>
     </div>
   </div>
 
@@ -779,13 +778,13 @@ var MODULES=[
  {key:'study',name:'学习专区',short:'学习',icon:'book'},
  {key:'diary',name:'日记',short:'日记',icon:'diary'},
  {key:'game',name:'五宝时间',short:'五宝',icon:'game'},
+ {key:'folders',name:'文件夹',short:'文件夹',icon:'folder'},
  {key:'sport',name:'运动',short:'运动',icon:'sport'},
  {key:'recipe',name:'食谱',short:'食谱',icon:'recipe'},
- {key:'hot',name:'热点灵感库',short:'热点',icon:'bulb'},
- {key:'period',name:'经期',short:'经期',icon:'flower'},
  {key:'badHabit',name:'坏习惯记录',short:'坏习惯',icon:'warn'},
+ {key:'period',name:'经期',short:'经期',icon:'flower'},
  {key:'anniversary',name:'纪念日',short:'纪念日',icon:'calendarHeart'},
- {key:'folders',name:'文件夹',short:'文件夹',icon:'folder'},
+ {key:'hot',name:'热点灵感库',short:'热点',icon:'bulb'},
  {key:'dataSummary',name:'数据汇总',short:'汇总',icon:'chart'},
  {key:'settings',name:'设置',short:'设置',icon:'settings'}
 ];
@@ -1598,7 +1597,7 @@ function openTodoEdit(rec){
    账户
 ================================================================== */
 function monthKey(d){return String(d).slice(0,7);}
-function getGoal(){return recs('savingGoal')[0];}
+function getGoals(){var a=recs('savingGoal').slice();a.forEach(function(g){if(!g.status)g.status='active';});a.sort(function(x,y){var xd=x.status==='done'?1:0,yd=y.status==='done'?1:0;if(xd!==yd)return xd-yd;if(xd)return (y.doneAt||0)-(x.doneAt||0);return (x.created||0)-(y.created||0);});return a;}
 
 function renderAccount(c){
   var mk=monthKey(state.date);
@@ -1606,7 +1605,42 @@ function renderAccount(c){
   var mon=all.filter(function(r){return monthKey(r.date)===mk;});
   var inc=mon.filter(function(r){return r.kind==='income';}).reduce(function(s,r){return s+num(r.amount);},0);
   var exp=mon.filter(function(r){return r.kind==='expense';}).reduce(function(s,r){return s+num(r.amount);},0);
-  var goal=getGoal();
+  var goals=getGoals();
+  var activeGoals=goals.filter(function(g){return g.status!=='done';});
+  var doneGoals=goals.filter(function(g){return g.status==='done';});
+  var goalCardsHtml='';
+  if(!goals.length){
+    goalCardsHtml='<div style="text-align:center;padding:22px;color:var(--brownSoft);font-size:13.5px;font-weight:700;">还没有攒钱目标，点下面「+ 新目标」设置一个吧 🐷</div>';
+  }else{
+    goalCardsHtml=activeGoals.map(function(g){
+      var pct=num(g.target)>0?Math.min(100,num(g.saved)/num(g.target)*100):0;
+      var reached=num(g.target)>0&&num(g.saved)>=num(g.target);
+      return '<div style="display:flex;gap:14px;align-items:center;padding:14px 0;border-bottom:1px dashed rgba(0,0,0,.12);">'
+        +ringChart(pct,'','',reached?'#9BE8A8':'#FF9A9E')
+        +'<div style="flex:1;min-width:0;"><div style="font-size:16px;font-weight:900;">'+esc(g.name)+'</div>'
+        +'<div style="font-size:20px;font-weight:900;margin-top:6px;color:'+(reached?'#3D9970':'#E08A8A')+';">'+money(g.saved)+'</div>'
+        +'<div style="font-size:12.5px;color:var(--brownLight);margin-top:3px;">目标 '+money(g.target)+' · 还差 '+money(Math.max(0,num(g.target)-num(g.saved)))+(reached?' · 已达成 🎉':'')+'</div>'
+        +'<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">'
+          +'<button class="btn small" data-goaladd="'+g.id+'">+ 存入</button>'
+          +'<button class="btn small secondary" data-goaledit="'+g.id+'">编辑</button>'
+          +'<button class="btn small secondary" data-goaldel="'+g.id+'">删除</button>'
+        +'</div></div></div>';
+    }).join('');
+    goalCardsHtml+='<button class="btn small secondary" id="goalNew" style="margin-top:12px;">+ 新目标</button>';
+    if(doneGoals.length){
+      var dopen=!!state.ui.goalDoneOpen;
+      var doneInner=doneGoals.map(function(g){
+        return '<div style="padding:10px 0;border-bottom:1px dashed rgba(0,0,0,.12);">'
+          +'<div style="font-weight:800;font-size:14px;">'+esc(g.name)+'</div>'
+          +'<div style="font-size:12px;color:var(--brownSoft);margin-top:3px;">已攒 '+money(g.saved)+' / 目标 '+money(g.target)+(g.doneAt?(' · 达成 '+fmtMD(g.doneAt)):'')+'</div>'
+          +'</div>';
+      }).join('');
+      goalCardsHtml+='<div style="margin-top:14px;">'
+        +'<button class="btn small secondary" id="goalDoneToggle" style="width:100%;">已完成目标 ('+doneGoals.length+') '+(dopen?'▲ 收起':'▼ 展开')+'</button>'
+        +'<div style="'+(dopen?'':'display:none;')+'margin-top:6px;" id="goalDoneList">'+doneInner+'</div>'
+        +'</div>';
+    }
+  }
 
   var catMap={};
   mon.filter(function(r){return r.kind==='expense';}).forEach(function(r){catMap[r.cat||'其他']=(catMap[r.cat||'其他']||0)+num(r.amount);});
@@ -1624,7 +1658,6 @@ function renderAccount(c){
   var lineInc=months.map(function(m){return {l:m.l,v:m.inc};});
   var lineExp=months.map(function(m){return {l:m.l,v:m.exp};});
 
-  var pct=goal&&num(goal.target)>0?(num(goal.saved)/num(goal.target)*100):0;
 
   var acctPeriod=state.ui.acctPeriod||'month';
   var HE=num(lsGet('highExpense',500));
@@ -1675,13 +1708,8 @@ function renderAccount(c){
      +'</div>'
    +'</div>'
    +'<div class="card">'+deco('star','right:16px;top:12px;width:24px;height:24px;opacity:.7;')
-     +'<div class="card-title">攒钱目标<button class="btn small secondary" id="goalEdit" style="margin-left:auto;">'+(goal?'修改':'设置')+'</button></div>'
-     +(goal?('<div class="progress-ring-wrap">'+ringChart(pct,'已完成','','#FF9A9E')
-        +'<div class="ring-info"><div style="font-size:16px;font-weight:900;">'+esc(goal.name)+'</div>'
-        +'<div class="ring-big" style="margin-top:8px;">'+money(goal.saved)+'</div>'
-        +'<div style="font-size:12.5px;color:var(--brownLight);margin-top:3px;">目标 '+money(goal.target)+'，还差 '+money(Math.max(0,num(goal.target)-num(goal.saved)))+'</div>'
-        +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;"><button class="btn small" id="goalAdd">+ 存入</button><button class="btn small secondary" id="goalDel">删除目标</button></div>'
-        +'</div></div>'):'<div style="text-align:center;padding:22px;color:var(--brownSoft);font-size:13.5px;font-weight:700;">还没有攒钱目标，点右上角设置一个吧 🐷</div>')
+     +'<div class="card-title">攒钱目标</div>'
+     +goalCardsHtml
    +'</div>'
    +'<div class="card"><div class="card-title">近半年收支趋势</div>'
      +'<div style="display:flex;gap:16px;font-size:12px;font-weight:800;margin-bottom:6px;"><span style="color:#3D9970;">● 收入</span><span style="color:#E05A5A;">● 支出</span></div>'
@@ -1698,9 +1726,11 @@ function renderAccount(c){
   fab.onclick=function(){openAccountEdit();};
   document.body.appendChild(fab);
 
-  $('#goalEdit').onclick=function(){openGoalEdit(goal);};
-  var ga=$('#goalAdd'); if(ga) ga.onclick=function(){openGoalAdd(goal);};
-  var gd=$('#goalDel'); if(gd) gd.onclick=function(){confirmBox('确定删除攒钱目标吗？',async function(){await delRec(goal.id);renderPage();toast('已删除');});};
+  var gn=$('#goalNew'); if(gn) gn.onclick=function(){openGoalEdit(null);};
+  $$('[data-goaladd]',c).forEach(function(b){b.onclick=function(){var g=goals.find(function(x){return x.id===b.getAttribute('data-goaladd');});if(g)openGoalAdd(g);};});
+  $$('[data-goaledit]',c).forEach(function(b){b.onclick=function(){var g=goals.find(function(x){return x.id===b.getAttribute('data-goaledit');});if(g)openGoalEdit(g);};});
+  $$('[data-goaldel]',c).forEach(function(b){b.onclick=function(){var g=goals.find(function(x){return x.id===b.getAttribute('data-goaldel');});if(g)confirmBox('确定删除「'+g.name+'」这个目标吗？',async function(){await delRec(g.id);renderPage();toast('已删除');});};});
+  var gt=$('#goalDoneToggle'); if(gt) gt.onclick=function(){state.ui.goalDoneOpen=!state.ui.goalDoneOpen;renderPage();};
   $$('[data-acp]',c).forEach(function(b){b.onclick=function(){state.ui.acctPeriod=b.getAttribute('data-acp');renderPage();};});
   $$('[data-del]',c).forEach(function(b){b.onclick=function(){
     confirmBox('确定删除这条记录吗？',async function(){await delRec(b.getAttribute('data-del'));renderPage();toast('已删除');});
@@ -1739,7 +1769,7 @@ function openAccountEdit(rec){
    });
 }
 function openGoalEdit(goal){
-  var g=goal||{name:'',target:'',saved:0};
+  var g=goal||{name:'',target:'',saved:0,status:'active'};
   openModal('攒钱目标',
    '<div class="form-group"><label>目标名称</label><input class="input" id="glName" value="'+esc(g.name)+'" placeholder="例如：旅行基金"></div>'
    +'<div class="form-group"><label>目标金额</label><input class="input" type="number" inputmode="decimal" id="glT" value="'+esc(g.target)+'" placeholder="10000"></div>'
@@ -1749,7 +1779,7 @@ function openGoalEdit(goal){
      $('#glC').onclick=closeModal;
      $('#glS2').onclick=async function(){
        var n=$('#glName').value.trim(); if(!n){toast('请输入目标名称');return;}
-       await addRec({type:'savingGoal',id:g.id,created:g.created,name:n,target:num($('#glT').value),saved:num($('#glS').value),date:todayStr()});
+       await addRec({type:'savingGoal',id:g.id,created:g.created,name:n,target:num($('#glT').value),saved:num($('#glS').value),status:g.status||'active',date:todayStr()});
        closeModal();toast('已保存');renderPage();
      };
    });
@@ -1761,8 +1791,11 @@ function openGoalAdd(goal){
      $('#gaC').onclick=closeModal;
      $('#gaS').onclick=async function(){
        var v=num($('#gaV').value); if(v<=0){toast('请输入金额');return;}
-       goal.saved=num(goal.saved)+v; await addRec(goal);
-       closeModal();toast('又攒了 '+money(v)+' ✿');renderPage();
+       goal.saved=num(goal.saved)+v;
+       var reached=num(goal.target)>0&&goal.saved>=num(goal.target);
+       if(reached){goal.status='done';goal.doneAt=goal.doneAt||todayStr();}
+       await addRec(goal);
+       closeModal();toast(reached?('目标达成 🎉 已归档，可开启新目标'):('又攒了 '+money(v)+' ✿'));renderPage();
      };
    });
 }
@@ -3863,7 +3896,7 @@ async function seedData(){
    {type:'account',date:addDays(t,-1),kind:'expense',cat:'购物',amount:158,note:'换季衣物'},
    {type:'account',date:addDays(t,-3),kind:'income',cat:'工资',amount:8600,note:'本月工资'},
    {type:'account',date:addDays(t,-6),kind:'expense',cat:'学习',amount:69,note:'买了本书'},
-   {type:'savingGoal',date:t,name:'旅行基金',target:10000,saved:3200},
+   {type:'savingGoal',date:t,name:'旅行基金',target:10000,saved:3200,status:'active'},
 
    {type:'study',date:t,minutes:50,note:'番茄钟'},
    {type:'study',date:addDays(t,-1),minutes:75,note:'番茄钟'},
