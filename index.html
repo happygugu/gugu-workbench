@@ -546,6 +546,7 @@ input,textarea,select{border:none;background:transparent;}
   transform:translateY(-1px);
 }
 .form-textarea{min-height:120px;resize:vertical;line-height:1.7;}
+.input.textarea{min-height:120px;max-height:70vh;resize:none;overflow:auto;line-height:1.78;}
 .form-select{appearance:none;background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="%236B4F4B"><path d="M7 10l5 5 5-5z"/></svg>');background-repeat:no-repeat;background-position:right 16px center;padding-right:42px;}
 .input-hint{font-size:11.5px;color:var(--brownSoft);margin-top:6px;padding-left:6px;font-weight:600;line-height:1.5;}
 .form-row{display:flex;gap:12px;align-items:flex-end;}
@@ -3381,7 +3382,7 @@ function renderFolderItems(c,folder){
       var linkHtml=r.link?'<div style="margin-top:10px;"><a class="folder-link '+plat.cls+'" href="'+esc(r.link)+'" target="_blank" rel="noopener" onclick="event.stopPropagation();"><span class="plat-dot" style="background:'+plat.color+';"></span>'+esc(plat.name)+' · '+esc(r.link.replace(/^https?:\/\//,'').replace(/^www\./,'').slice(0,38))+'</a></div>':'';
       var fmTitle=r.title||(r.text?r.text.split('\n')[0].slice(0,30):'无标题');
       var fmContent=r.text||'';
-      return '<div class="card folder-item-card'+(r.link?' clickable':'')+'" style="'+(r.pinned?'background:linear-gradient(145deg,#FFFBEB,#FFF3D6);':'')+'"'+(r.link?' data-jump="'+esc(r.link)+'"':'')+'>'
+      return '<div class="card folder-item-card clickable" style="'+(r.pinned?'background:linear-gradient(145deg,#FFFBEB,#FFF3D6);':'')+'" data-view="'+esc(r.id)+'">'
        +'<div class="fm-title">'+esc(fmTitle)+'</div>'
        +(fmContent?'<div class="fm-content">'+esc(fmContent)+'</div>':'')
        +linkHtml
@@ -3408,10 +3409,12 @@ function renderFolderItems(c,folder){
   $$('[data-did]',c).forEach(function(b){b.onclick=function(){
     confirmBox('删除这条内容？',async function(){await delRec(b.getAttribute('data-did'));renderPage();toast('已删除');});
   };});
-  $$('.folder-item-card[data-jump]',c).forEach(function(card){
+  $$('.folder-item-card',c).forEach(function(card){
     card.onclick=function(e){
       if(e.target.closest('button,a')) return;
-      window.open(card.getAttribute('data-jump'),'_blank');
+      var id=card.getAttribute('data-view');
+      var rec=state.records.filter(function(x){return x.id===id;})[0];
+      if(rec) openFolderItemView(rec);
     };
   });
 }
@@ -3445,6 +3448,10 @@ function openFolderItemEdit(folder,rec){
    +'<div class="form-group"><label>日期</label><input class="input" type="date" id="fiD" value="'+esc(r.date||state.date)+'"></div>',
    '<button class="btn secondary" id="fiC">取消</button><button class="btn" id="fiS">保存</button>',
    function(){
+     var fiT=$('#fiT');
+     function autoGrow(){fiT.style.height='auto';fiT.style.height=fiT.scrollHeight+'px';}
+     fiT.addEventListener('input',autoGrow);
+     autoGrow(); setTimeout(autoGrow,0);
      $('#fiC').onclick=closeModal;
      $('#fiS').onclick=async function(){
        var title=$('#fiTitle').value.trim();
@@ -3454,6 +3461,21 @@ function openFolderItemEdit(folder,rec){
          date:$('#fiD').value||state.date,folder:folder});
        closeModal();toast('已保存');renderPage();
      };
+   });
+}
+function openFolderItemView(rec){
+  if(!rec) return;
+  var plat=rec.link?linkPlatform(rec.link):null;
+  openModal(esc(rec.title||'无标题'),
+   '<div style="font-size:12px;color:var(--brownSoft);font-weight:800;margin-bottom:12px;">'+(rec.folder?esc(rec.folder)+' · ':'')+esc(fmtMD(rec.date))+'</div>'
+   +(rec.text?'<div style="font-size:15px;line-height:1.95;white-space:pre-wrap;word-break:break-word;color:var(--brown);">'+esc(rec.text)+'</div>':'<div style="font-size:13.5px;color:var(--brownSoft);font-weight:700;">这条没有写内容</div>')
+   +(rec.link?'<div style="margin-top:16px;"><a class="folder-link '+(plat?plat.cls:'')+'" href="'+esc(rec.link)+'" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="display:inline-flex;align-items:center;gap:7px;"><span class="plat-dot" style="background:'+(plat?plat.color:'#3B7BB5')+';"></span>'+(plat?plat.name:'链接')+' · '+esc(rec.link.replace(/^https?:\/\//,'').replace(/^www\./,'').slice(0,46))+'</a></div>':''),
+   '<button class="btn secondary" id="viClose">关闭</button><button class="btn secondary" id="viPin">'+(rec.pinned?'取消置顶':'置顶')+'</button><button class="btn secondary" id="viEdit">编辑</button><button class="btn" id="viDel">删除</button>',
+   function(){
+     $('#viClose').onclick=closeModal;
+     $('#viPin').onclick=async function(){rec.pinned=!rec.pinned;await addRec(rec);closeModal();renderPage();};
+     $('#viEdit').onclick=function(){closeModal();openFolderItemEdit(rec.folder,rec);};
+     $('#viDel').onclick=function(){closeModal();confirmBox('删除这条内容？',async function(){await delRec(rec.id);renderPage();toast('已删除');});};
    });
 }
 
