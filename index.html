@@ -434,6 +434,8 @@ input,textarea,select{border:none;background:transparent;}
 .folder-item-card.clickable{cursor:pointer;}
 .folder-item-card.clickable:hover{transform:translateY(-3px);box-shadow:var(--shadow);}
 .folder-item-card.clickable:active{transform:scale(.98);}
+.fm-title{font-size:16px;font-weight:800;color:var(--brown);line-height:1.4;margin-bottom:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.fm-content{font-size:13.5px;color:var(--brownLight);line-height:1.62;white-space:pre-wrap;word-break:break-word;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:4px;}
 
 .praise-overlay{position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;background:rgba(107,79,75,0.25);backdrop-filter:blur(3px);padding:20px;animation:fadeIn .25s;}
 .praise-card{background:linear-gradient(180deg,var(--cream) 0%,var(--cream2) 100%);border-radius:40px;padding:34px 28px;text-align:center;max-width:320px;box-shadow:0 28px 70px rgba(107,79,75,0.3);border:1px solid rgba(255,255,255,0.7);animation:popIn .4s cubic-bezier(.34,1.56,.64,1);position:relative;}
@@ -2348,7 +2350,24 @@ function openDiaryEdit(rec){
 /* ==================================================================
    五宝时间
 ================================================================== */
-var gameTimer={t:null,sec:0,running:false};
+var gameTimer={sec:0,running:false,startAt:0};
+function gameSecNow(){ return gameTimer.sec + (gameTimer.running? Math.floor((Date.now()-gameTimer.startAt)/1000):0); }
+function gameTimerSave(){ lsSet('gameTimerState',{sec:gameTimer.sec,running:gameTimer.running,startAt:gameTimer.startAt}); }
+function gameTimerRestore(){
+  var s=lsGet('gameTimerState',null); if(!s) return;
+  gameTimer.sec=num(s.sec,0);
+  gameTimer.running=!!s.running;
+  gameTimer.startAt=num(s.startAt,0);
+  gameTimerSave();
+}
+function gameTimerPaint(){ var e=$('#gmTime'); if(e) e.textContent=fmtClock(gameSecNow()); }
+function gameTimerTick(){ if(!gameTimer.running) return; gameTimerPaint(); }
+function gameTimerStart(){ gameTimer.running=true; gameTimer.startAt=Date.now(); gameTimerSave(); gameTimerPaint(); }
+function gameTimerPause(){ gameTimer.sec=gameSecNow(); gameTimer.running=false; gameTimer.startAt=0; gameTimerSave(); gameTimerPaint(); }
+setInterval(gameTimerTick,500);
+document.addEventListener('visibilitychange',function(){ if(!document.hidden){ gameTimerTick(); } });
+window.addEventListener('focus',function(){ gameTimerTick(); });
+window.addEventListener('pageshow',function(){ gameTimerTick(); });
 
 function renderGame(c){
   var all=recs('game').slice().sort(byDateDesc);
@@ -2383,7 +2402,7 @@ function renderGame(c){
      +'<div class="pomo-wrap">'
        +'<div style="width:96px;height:96px;flex-shrink:0;animation:float 3.4s ease-in-out infinite;">'+ICONS.game+'</div>'
        +'<div style="text-align:center;">'
-         +'<div class="pomo-time" id="gmTime">'+fmtClock(gameTimer.sec)+'</div>'
+         +'<div class="pomo-time" id="gmTime">'+fmtClock(gameSecNow())+'</div>'
          +'<div style="font-size:12.5px;color:var(--brownLight);margin-top:8px;font-weight:700;">今日已玩 '+todayMin+' 分钟 · 本月共 '+monMin+' 分钟</div>'
          +'<div style="display:flex;gap:10px;margin-top:14px;justify-content:center;flex-wrap:wrap;">'
            +'<button class="btn" id="gmToggle">'+(gameTimer.running?'暂停':'开始')+'</button>'
@@ -2405,17 +2424,17 @@ function renderGame(c){
       }),8):emptyState('还没有游戏记录','开始计时或手动补记一条吧 🎮'))
    +'</div></div>';
 
-  function paint(){var e=$('#gmTime'); if(e) e.textContent=fmtClock(gameTimer.sec);}
+  function paint(){var e=$('#gmTime'); if(e) e.textContent=fmtClock(gameSecNow());}
   $('#gmToggle').onclick=function(){
-    if(gameTimer.running){clearInterval(gameTimer.t);gameTimer.t=null;gameTimer.running=false;this.textContent='开始';}
-    else{gameTimer.running=true;this.textContent='暂停';gameTimer.t=setInterval(function(){gameTimer.sec++;paint();},1000);}
+    if(gameTimer.running){ gameTimerPause(); this.textContent='开始'; }
+    else { gameTimerStart(); this.textContent='暂停'; }
   };
   $('#gmSave').onclick=async function(){
-    clearInterval(gameTimer.t);gameTimer.t=null;gameTimer.running=false;
-    var m=Math.round(gameTimer.sec/60);
-    if(m<1){toast('时长不足 1 分钟');gameTimer.sec=0;paint();return;}
+    var m=Math.round(gameSecNow()/60);
+    if(m<1){ toast('时长不足 1 分钟'); gameTimerPause(); gameTimer.sec=0; gameTimerSave(); paint(); return; }
     await addRec({type:'game',date:state.date,minutes:m,note:'计时器'});
-    gameTimer.sec=0; toast('已记录 '+m+' 分钟');renderPage();
+    gameTimerPause(); gameTimer.sec=0; gameTimerSave();
+    toast('已记录 '+m+' 分钟'); renderPage();
   };
   $('#gmManual').onclick=function(){
     openModal('手动补记',
@@ -3277,8 +3296,13 @@ function openAnnivEdit(rec){
    个人灵感
 ================================================================== */
 var DEFAULT_FOLDERS=['灵感','购物'];
+function folderStore(){try{var v=localStorage.getItem(LS_PREFIX+'folders');return v?JSON.parse(v):[];}catch(e){return [];}}
+function folderStoreAdd(name){var a=folderStore();if(a.indexOf(name)<0){a.push(name);try{localStorage.setItem(LS_PREFIX+'folders',JSON.stringify(a));}catch(e){}}}
+function folderStoreRename(oldN,newN){var a=folderStore();var i=a.indexOf(oldN);if(i>=0){a[i]=newN;try{localStorage.setItem(LS_PREFIX+'folders',JSON.stringify(a));}catch(e){}}}
+function folderStoreDel(name){var a=folderStore();var i=a.indexOf(name);if(i>=0){a.splice(i,1);try{localStorage.setItem(LS_PREFIX+'folders',JSON.stringify(a));}catch(e){}}}
 function folderList(){
   var set={}; DEFAULT_FOLDERS.forEach(function(f){set[f]=1;});
+  folderStore().forEach(function(f){set[f]=1;});
   recs('idea').forEach(function(r){if(r.folder) set[r.folder]=1;});
   return Object.keys(set);
 }
@@ -3316,6 +3340,7 @@ function renderFolders(c){
     confirmBox('确定删除文件夹「'+f+'」吗？（里面的 '+cnt+' 条内容会一起消失）',async function(){
       var ids=recs('idea').filter(function(r){return r.folder===f;}).map(function(r){return r.id;});
       for(var i=0;i<ids.length;i++) await delRec(ids[i]);
+      folderStoreDel(f);
       if(state.ui.folderView===f) state.ui.folderView='list';
       renderPage();toast('已删除');
     });
@@ -3340,7 +3365,7 @@ function renderFolderItems(c,folder){
     return byDateDesc(a,b);
   });
   var list=kw?all.filter(function(r){
-    return (r.text||'').toLowerCase().indexOf(kw)>=0||(r.tags||[]).join(' ').toLowerCase().indexOf(kw)>=0;
+    return (r.text||'').toLowerCase().indexOf(kw)>=0||(r.title||'').toLowerCase().indexOf(kw)>=0||(r.tags||[]).join(' ').toLowerCase().indexOf(kw)>=0;
   }):all;
   c.innerHTML='<div class="page active">'
    +'<div class="card">'+deco('peach','right:14px;top:10px;width:26px;height:26px;opacity:.55;animation:float 4s infinite;')
@@ -3354,12 +3379,11 @@ function renderFolderItems(c,folder){
    +(list.length?foldGrid('folderItems_'+folder,list.map(function(r){
       var plat=linkPlatform(r.link||'');
       var linkHtml=r.link?'<div style="margin-top:10px;"><a class="folder-link '+plat.cls+'" href="'+esc(r.link)+'" target="_blank" rel="noopener" onclick="event.stopPropagation();"><span class="plat-dot" style="background:'+plat.color+';"></span>'+esc(plat.name)+' · '+esc(r.link.replace(/^https?:\/\//,'').replace(/^www\./,'').slice(0,38))+'</a></div>':'';
+      var fmTitle=r.title||(r.text?r.text.split('\n')[0].slice(0,30):'无标题');
+      var fmContent=r.text||'';
       return '<div class="card folder-item-card'+(r.link?' clickable':'')+'" style="'+(r.pinned?'background:linear-gradient(145deg,#FFFBEB,#FFF3D6);':'')+'"'+(r.link?' data-jump="'+esc(r.link)+'"':'')+'>'
-       +'<div style="display:flex;align-items:flex-start;gap:10px;">'
-         +'<div style="width:34px;height:34px;flex-shrink:0;">'+ICONS.note+'</div>'
-         +'<div style="flex:1;min-width:0;font-size:14px;line-height:1.8;white-space:pre-wrap;word-break:break-word;font-weight:600;">'+esc(r.text)+'</div>'
-       +'</div>'
-       +((r.tags&&r.tags.length)?'<div style="margin-top:8px;">'+r.tags.map(function(t){return '<span class="tag-mini">#'+esc(t)+'</span>';}).join('')+'</div>':'')
+       +'<div class="fm-title">'+esc(fmTitle)+'</div>'
+       +(fmContent?'<div class="fm-content">'+esc(fmContent)+'</div>':'')
        +linkHtml
        +'<div style="display:flex;align-items:center;gap:8px;margin-top:12px;">'
          +'<span style="font-size:11px;color:var(--brownSoft);">'+esc(fmtMD(r.date))+'</span>'
@@ -3401,28 +3425,33 @@ function openFolderEdit(oldName){
      $('#fldS').onclick=async function(){
        var name=$('#fldName').value.trim(); if(!name){toast('请输入名称');return;}
        if(isNew && folderList().indexOf(name)>=0){toast('文件夹已存在');return;}
-       if(!isNew && name!==oldName){
+       if(isNew){
+         folderStoreAdd(name);
+       }else if(name!==oldName){
          var items=recs('idea').filter(function(r){return r.folder===oldName;});
          for(var i=0;i<items.length;i++){items[i].folder=name;await addRec(items[i]);}
+         folderStoreRename(oldName,name);
        }
        closeModal();toast('已保存');renderPage();
      };
    });
 }
 function openFolderItemEdit(folder,rec){
-  var r=rec||{text:'',tags:[],date:state.date,folder:folder};
+  var r=rec||{title:'',text:'',link:'',date:state.date,folder:folder};
   openModal(rec?'编辑条目':'添加条目 · '+folder,
-   '<div class="form-group"><label>内容</label><textarea class="input textarea" id="fiT" placeholder="想到什么就写什么...">'+esc(r.text)+'</textarea></div>'
-   +'<div class="form-group"><label>标签（空格或逗号分隔）</label><input class="input" id="fiG" value="'+esc((r.tags||[]).join(' '))+'" placeholder="例如：选题 产品 随想"></div>'
-   +'<div class="form-group"><label>日期</label><input class="input" type="date" id="fiD" value="'+esc(r.date||state.date)+'"></div>'
-   +'<div class="form-group"><label>链接（选填，支持抖音 / B站 / 小红书 / 微博等一键跳转）</label><input class="input" id="fiL" value="'+esc(r.link||'')+'" placeholder="粘贴 https:// 开头的真实链接"></div>',
+   '<div class="form-group"><label>标题</label><input class="input" id="fiTitle" value="'+esc(r.title||'')+'" placeholder="给这条记个标题，比如 周末书单"></div>'
+   +'<div class="form-group"><label>内容</label><textarea class="input textarea" id="fiT" placeholder="想到什么就写什么...">'+esc(r.text||'')+'</textarea></div>'
+   +'<div class="form-group"><label>链接（选填，支持抖音 / B站 / 小红书 / 微博等一键跳转）</label><input class="input" id="fiL" value="'+esc(r.link||'')+'" placeholder="粘贴 https:// 开头的真实链接"></div>'
+   +'<div class="form-group"><label>日期</label><input class="input" type="date" id="fiD" value="'+esc(r.date||state.date)+'"></div>',
    '<button class="btn secondary" id="fiC">取消</button><button class="btn" id="fiS">保存</button>',
    function(){
      $('#fiC').onclick=closeModal;
      $('#fiS').onclick=async function(){
-       var t=$('#fiT').value.trim(); if(!t){toast('写点什么吧');return;}
-       await addRec({type:'idea',id:r.id,created:r.created,pinned:!!r.pinned,text:t,link:($('#fiL').value||'').trim(),
-         tags:$('#fiG').value.split(/[\s,，]+/).filter(Boolean),date:$('#fiD').value||state.date,folder:folder});
+       var title=$('#fiTitle').value.trim();
+       var text=$('#fiT').value.trim();
+       if(!title && !text){toast('写点什么吧');return;}
+       await addRec({type:'idea',id:r.id,created:r.created,pinned:!!r.pinned,title:title,text:text,link:($('#fiL').value||'').trim(),
+         date:$('#fiD').value||state.date,folder:folder});
        closeModal();toast('已保存');renderPage();
      };
    });
@@ -3674,7 +3703,7 @@ $('#stPet').onclick=function(){lsSet('petHideDate','');petShow();toast('小宠�
     toast('已保存设置 ✿');
   };
   $('#expJson').onclick=function(){
-    var data={app:'谷谷工作台',version:2,exportedAt:new Date().toISOString(),settings:state.settings,records:state.records};
+    var data={app:'谷谷工作台',version:2,exportedAt:new Date().toISOString(),settings:state.settings,records:state.records,folders:folderStore()};
     downloadFile(JSON.stringify(data,null,2),'谷谷工作台备份_'+todayStr()+'.json','application/json');
     toast('已导出 '+state.records.length+' 条数据');
   };
@@ -3850,6 +3879,7 @@ function handleImportFile(){
                 await dbPut(o);
               }
               if(j.settings){for(var key in j.settings) state.settings[key]=j.settings[key]; saveSettings(); if($('#sidebarUser')) $('#sidebarUser').textContent=state.settings.name;}
+              if(Array.isArray(j.folders)){var fs=folderStore(); j.folders.forEach(function(f){if(fs.indexOf(f)<0)fs.push(f);}); try{localStorage.setItem(LS_PREFIX+'folders',JSON.stringify(fs));}catch(e){}}
               toast('迁移完成：新增 '+added+'，覆盖 '+modified+'，跳过 '+skipped+(failed?'，失败 '+failed:'')+' ✿'); renderPage();
             },80);
           };
@@ -4197,6 +4227,8 @@ async function boot(){
   pomoRestore();
   if(pomo.expiredMin){ savePomo(pomo.expiredMin); pomo.expiredMin=0; pomoSave(); }
   pomoPaint();
+  gameTimerRestore();
+  gameTimerPaint();
   autoFetchHot();
   initPet();
   setTimeout(function(){
